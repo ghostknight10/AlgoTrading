@@ -30,6 +30,20 @@ SLIPPAGE_PCT = 0.001  # 0.1% per side friction
 
 DEFAULT_INITIAL_CAPITAL = 10_000_000.0  # ₹1 Crore default
 
+
+import requests
+
+def send_telegram_alert(message, bot_token="8902953168:AAGZWp0jscFDTOOKPxk004smiIewkkzvzkU", chat_id="8785681126"):
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    payload = {"chat_id": chat_id, "text": message, "parse_mode": "Markdown"}
+    try:
+        requests.post(url, data=payload)
+    except Exception as e:
+        print("Telegram alert error:", e)
+
+# Example Usage inside your daily stop-loss checker:
+# send_telegram_alert("🔴 [STOP LOSS ALERT] MAFANG.NS hit 15% Stop Loss at ₹265.50. Position exited to Cash.")
+
 def load_state():
     if os.path.exists(STATE_FILE):
         with open(STATE_FILE, "r") as f:
