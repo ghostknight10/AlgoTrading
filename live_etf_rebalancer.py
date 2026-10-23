@@ -54,18 +54,24 @@ def generate_signals(total_capital=5000000.0, held_etfs=[]):
     
     rankings = []
     for tkr, df in data_dict.items():
-        if len(df) < 200:
+        closes = df["Close"].dropna()
+        if len(closes) < 200:
             continue
-        c_price = float(df["Close"].iloc[-1].iloc[0]) if hasattr(df["Close"].iloc[-1], "iloc") else float(df["Close"].iloc[-1])
-        sma200 = float(df["Close"].rolling(200).mean().iloc[-1].iloc[0]) if hasattr(df["Close"].iloc[-1], "iloc") else float(df["Close"].rolling(200).mean().iloc[-1])
+        c_price = float(closes.iloc[-1].iloc[0]) if hasattr(closes.iloc[-1], "iloc") else float(closes.iloc[-1])
+        if np.isnan(c_price) or c_price <= 0:
+            continue
+        sma200_series = closes.rolling(200).mean().dropna()
+        if len(sma200_series) == 0:
+            continue
+        sma200 = float(sma200_series.iloc[-1].iloc[0]) if hasattr(sma200_series.iloc[-1], "iloc") else float(sma200_series.iloc[-1])
         
         if c_price <= sma200:
             continue
             
-        r1m = (c_price - df["Close"].iloc[-21]) / df["Close"].iloc[-21]
-        r3m = (c_price - df["Close"].iloc[-63]) / df["Close"].iloc[-63]
-        r6m = (c_price - df["Close"].iloc[-126]) / df["Close"].iloc[-126]
-        r12m = (c_price - df["Close"].iloc[-252]) / df["Close"].iloc[-252] if len(df) >= 252 else r6m
+        r1m = (c_price - closes.iloc[-21]) / closes.iloc[-21]
+        r3m = (c_price - closes.iloc[-63]) / closes.iloc[-63]
+        r6m = (c_price - closes.iloc[-126]) / closes.iloc[-126]
+        r12m = (c_price - closes.iloc[-252]) / closes.iloc[-252] if len(closes) >= 252 else r6m
         
         score = 0.10 * r1m + 0.20 * r3m + 0.30 * r6m + 0.40 * r12m
         if hasattr(score, "iloc"):

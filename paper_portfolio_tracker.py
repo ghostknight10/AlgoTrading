@@ -60,15 +60,17 @@ def get_current_price(ticker):
         try:
             df = yf.download(ticker, period="5d", progress=False)
             if not df.empty and "Close" in df.columns:
-                close_vals = df["Close"].values
-                if len(close_vals) > 0:
-                    val = float(close_vals[-1].iloc[0]) if hasattr(close_vals[-1], "iloc") else float(close_vals[-1])
-                    return val
-        except Exception:
-            pass
-    # Offline fallback generator for testing
-    np.random.seed(abs(hash(ticker)) % 10000)
-    return float(np.random.uniform(100, 2500))
+                c_series = df["Close"].dropna()
+                if len(c_series) > 0:
+                    val = c_series.iloc[-1]
+                    if hasattr(val, "iloc"):
+                        val = val.iloc[0]
+                    val = float(val)
+                    if not np.isnan(val) and val > 0:
+                        return val
+        except Exception as e:
+            print(f"yfinance fetch error for {ticker}: {e}")
+    return None
 
 def initialize_portfolio(capital=DEFAULT_INITIAL_CAPITAL):
     """Initializes a new paper trading portfolio state."""
@@ -97,6 +99,97 @@ def initialize_portfolio(capital=DEFAULT_INITIAL_CAPITAL):
     print(f"   • Stock Strategy Allocation : ₹{capital*0.5:,.2f} (50%)")
     return state
 
+def auto_allocate_etfs(state, today_str):
+    """Automatically scans ETF universe and buys Top 6 qualifying momentum ETFs if unallocated."""
+    etf_cash = state["etf_portfolio"].get("cash", 0.0)
+    if etf_cash < 100_000:
+        return
+    
+    print(f"🚀 [AUTO-ALLOCATION] Scanning Multi-Asset ETF Universe for Top 6 Momentum rotation...")
+    try:
+        from live_etf_rebalancer import fetch_etf_data
+        data_dict = fetch_etf_data()
+        rankings = []
+        for tkr, df in data_dict.items():
+            closes = df['Close'].dropna()
+            if len(closes) < 200:
+                continue
+            c_price = float(closes.iloc[-1].iloc[0]) if hasattr(closes.iloc[-1], 'iloc') else float(closes.iloc[-1])
+            if np.isnan(c_price) or c_price <= 0:
+                continue
+            sma200_series = closes.rolling(200).mean().dropna()
+            if len(sma200_series) == 0:
+                continue
+            sma200 = float(sma200_series.iloc[-1].iloc[0]) if hasattr(sma200_series.iloc[-1], 'iloc') else float(sma200_series.iloc[-1])
+            if c_price <= sma200:
+                continue
+            r1m = (c_price - closes.iloc[-21]) / closes.iloc[-21]
+            r3m = (c_price - closes.iloc[-63]) / closes.iloc[-63]
+            r6m = (c_price - closes.iloc[-126]) / closes.iloc[-126]
+            r12m = (c_price - closes.iloc[-252]) / closes.iloc[-252] if len(closes) >= 252 else r6m
+            raw_score = 0.10 * r1m + 0.20 * r3m + 0.30 * r6m + 0.40 * r12m
+            score = float(raw_score.iloc[0]) if hasattr(raw_score, 'iloc') else float(raw_score)
+            rankings.append({'ticker': tkr, 'price': c_price, 'sma200': sma200, 'score': score})
+
+        rankings.sort(key=lambda x: x['score'], reverse=True)
+        top_6 = rankings[:6]
+        if len(top_6) == 0:
+            print("  ⚠️ No ETFs currently qualifying above 200 SMA. Remaining in Cash.")
+            return
+
+        slot_size = etf_cash / float(len(top_6))
+        bought_names = []
+        for item in top_6:
+            tkr = item['ticker']
+            price = item['price']
+            shares = int(slot_size / price)
+            if shares > 0:
+                cost = shares * price
+                tx = cost * SLIPPAGE_PCT
+                total_spent = cost + tx
+                if state["etf_portfolio"]["cash"] >= total_spent:
+                    state["etf_portfolio"]["cash"] -= total_spent
+                    state["etf_portfolio"]["positions"][tkr] = {
+                        "shares": shares,
+                        "entry_price": price,
+                        "peak_price": price,
+                        "entry_date": today_str
+                    }
+                    bought_names.append(f"{tkr} ({shares} sh @ ₹{price:.2f})")
+                    print(f"  🟢 [AUTO-BUY ETF] {tkr:<14} | Shares: {shares} | Price: ₹{price:.2f}")
+
+        if bought_names:
+            msg = (
+                f"🟢 *AUTONOMOUS ETF ALLOCATION EXECUTION*\n\n"
+                f"Deployed ₹{etf_cash:,.2f} across Top {len(bought_names)} Momentum ETFs:\n"
+                + "\n".join([f"• `{b}`" for b in bought_names])
+                + f"\n\n*Risk Rules Active:* 15% Fixed SL & 20% Trailing SL armed."
+            )
+            send_telegram_alert(msg)
+    except Exception as e:
+        print(f"Error during auto ETF allocation: {e}")
+
+def auto_allocate_stocks(state, today_str):
+    """Checks Macro Regime Guard. If Bullish, deploys into Top 15 stocks. If Bearish, stays in Cash Buffer."""
+    stock_cash = state["stock_portfolio"].get("cash", 0.0)
+    if stock_cash < 100_000:
+        return
+        
+    print(f"🔍 [AUTO-ALLOCATION] Checking Nifty 500 Macro Regime Guard for Stock allocation...")
+    try:
+        from live_nifty500_rebalancer import load_live_data, BENCHMARK_TICKER
+        data_dict = load_live_data()
+        bm_df = data_dict.get(BENCHMARK_TICKER)
+        if bm_df is not None:
+            bm_df["200_EMA"] = bm_df["Close"].ewm(span=200, adjust=False).mean()
+            latest_close = bm_df["Close"].iloc[-1]
+            latest_ema = bm_df["200_EMA"].iloc[-1]
+            if latest_close < latest_ema:
+                print(f"  🛡️ [REGIME GUARD: BEARISH] Nifty 500 ({latest_close:.1f}) < 200 EMA ({latest_ema:.1f}). Capital parked safely in Cash.")
+                return
+    except Exception as e:
+        print(f"Error checking regime guard: {e}")
+
 def run_daily_check():
     """Runs daily price updates & checks 15% fixed and 20% trailing stop-losses."""
     state = load_state()
@@ -112,10 +205,19 @@ def run_daily_check():
     total_portfolio_val = 0.0
     stopped_out_count = 0
 
+    # Auto-deploy initial allocations if unallocated
+    if len(state["etf_portfolio"]["positions"]) == 0 and state["etf_portfolio"]["cash"] > 100_000:
+        auto_allocate_etfs(state, today_str)
+
+    if len(state["stock_portfolio"]["positions"]) == 0 and state["stock_portfolio"]["cash"] > 100_000:
+        auto_allocate_stocks(state, today_str)
+
     # Process ETF Strategy Positions
     etf_pos_val = 0.0
     for ticker, pos in list(state["etf_portfolio"]["positions"].items()):
         c_price = get_current_price(ticker)
+        if c_price is None:
+            c_price = pos.get("peak_price", pos["entry_price"])
         
         # Update peak price
         if c_price > pos["peak_price"]:
@@ -148,6 +250,7 @@ def run_daily_check():
                 "exit_date": today_str,
                 "entry_price": entry_p,
                 "exit_price": c_price,
+                "shares": pos["shares"],
                 "pnl": pnl,
                 "pnl_pct": pnl_pct,
                 "reason": exit_reason
@@ -155,6 +258,16 @@ def run_daily_check():
             del state["etf_portfolio"]["positions"][ticker]
             stopped_out_count += 1
             print(f"  🔴 [ETF STOP-OUT] {ticker:<12} | Exit: ₹{c_price:.2f} | PnL: {pnl_pct:+.2f}% | Reason: {exit_reason}")
+            stop_msg = (
+                f"🚨 *STOP LOSS HIT — ETF*\n\n"
+                f"• Asset: `{ticker}`\n"
+                f"• Trigger: *{exit_reason}*\n"
+                f"• Exit Price: ₹{c_price:.2f}\n"
+                f"• Entry Price: ₹{entry_p:.2f}\n"
+                f"• Net P&L: *{pnl_pct:+.2f}%* (₹{pnl:+,.2f})\n"
+                f"• Action: Exited to Cash Buffer"
+            )
+            send_telegram_alert(stop_msg)
         else:
             cur_val = pos["shares"] * c_price
             etf_pos_val += cur_val
@@ -165,6 +278,8 @@ def run_daily_check():
     stock_pos_val = 0.0
     for ticker, pos in list(state["stock_portfolio"]["positions"].items()):
         c_price = get_current_price(ticker)
+        if c_price is None:
+            c_price = pos.get("peak_price", pos["entry_price"])
         
         if c_price > pos["peak_price"]:
             pos["peak_price"] = c_price
@@ -195,6 +310,7 @@ def run_daily_check():
                 "exit_date": today_str,
                 "entry_price": entry_p,
                 "exit_price": c_price,
+                "shares": pos["shares"],
                 "pnl": pnl,
                 "pnl_pct": pnl_pct,
                 "reason": exit_reason
@@ -202,6 +318,16 @@ def run_daily_check():
             del state["stock_portfolio"]["positions"][ticker]
             stopped_out_count += 1
             print(f"  🔴 [STOCK STOP-OUT] {ticker:<12} | Exit: ₹{c_price:.2f} | PnL: {pnl_pct:+.2f}% | Reason: {exit_reason}")
+            stop_msg = (
+                f"🚨 *STOP LOSS HIT — STOCK*\n\n"
+                f"• Asset: `{ticker}`\n"
+                f"• Trigger: *{exit_reason}*\n"
+                f"• Exit Price: ₹{c_price:.2f}\n"
+                f"• Entry Price: ₹{entry_p:.2f}\n"
+                f"• Net P&L: *{pnl_pct:+.2f}%* (₹{pnl:+,.2f})\n"
+                f"• Action: Exited to Cash Buffer"
+            )
+            send_telegram_alert(stop_msg)
         else:
             cur_val = pos["shares"] * c_price
             stock_pos_val += cur_val
@@ -234,6 +360,16 @@ def run_daily_check():
     print(f"  • Stock Strategy Value  : ₹{total_stock_val:,.2f} (Positions: ₹{stock_pos_val:,.2f} | Cash: ₹{state['stock_portfolio']['cash']:,.2f})")
     print(f"  • Daily Stop Exits Hit  : {stopped_out_count} assets")
     print("=" * 80)
+
+    summary_msg = (
+        f"📊 *DAILY PORTFOLIO UPDATE — {today_str}*\n\n"
+        f"• Total Net Worth: *₹{total_portfolio_val:,.2f}* ({pnl_overall_pct:+.2f}%)\n"
+        f"• ETF Strategy: ₹{total_etf_val:,.2f}\n"
+        f"• Stock Strategy: ₹{total_stock_val:,.2f}\n"
+        f"• Liquid Cash: ₹{state['etf_portfolio']['cash'] + state['stock_portfolio']['cash']:,.2f}\n"
+        f"• Stop Exits Today: *{stopped_out_count}*"
+    )
+    send_telegram_alert(summary_msg)
 
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "--reset":
