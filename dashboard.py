@@ -304,6 +304,12 @@ st.sidebar.caption("Dual Momentum Architecture")
 if st.sidebar.button("Refresh Data", use_container_width=True):
     st.rerun()
 
+if st.sidebar.button("Run Live Market Check Now", use_container_width=True):
+    with st.spinner("Fetching live prices, checking stop losses, and sending alerts..."):
+        os.system("python3 paper_portfolio_tracker.py")
+        st.success("Live market check complete!")
+        st.rerun()
+
 st.sidebar.markdown("---")
 st.sidebar.subheader("Max Drawdown Options")
 dd_display_mode = st.sidebar.selectbox(

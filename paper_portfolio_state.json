@@ -1,12 +1,43 @@
 {
     "created_at": "2026-10-24",
-    "last_updated": "2026-10-24",
+    "last_updated": "2026-10-26",
     "initial_capital": 1000000.0,
     "cash_balance": 1000000.0,
     "etf_portfolio": {
         "allocated_capital": 500000.0,
-        "cash": 500000.0,
-        "positions": {}
+        "cash": 83326.48540700153,
+        "positions": {
+            "MAFANG.NS": {
+                "shares": 340,
+                "entry_price": 244.49000549316406,
+                "peak_price": 244.49000549316406,
+                "entry_date": "2026-10-26"
+            },
+            "MASPTOP50.NS": {
+                "shares": 843,
+                "entry_price": 98.77999877929688,
+                "peak_price": 98.79000091552734,
+                "entry_date": "2026-10-26"
+            },
+            "PHARMABEES.NS": {
+                "shares": 3178,
+                "entry_price": 26.219999313354492,
+                "peak_price": 26.239999771118164,
+                "entry_date": "2026-10-26"
+            },
+            "MON100.NS": {
+                "shares": 284,
+                "entry_price": 293.04998779296875,
+                "peak_price": 293.04998779296875,
+                "entry_date": "2026-10-26"
+            },
+            "ITBEES.NS": {
+                "shares": 2344,
+                "entry_price": 35.540000915527344,
+                "peak_price": 35.540000915527344,
+                "entry_date": "2026-10-26"
+            }
+        }
     },
     "stock_portfolio": {
         "allocated_capital": 500000.0,
@@ -21,6 +52,13 @@
             "etf_val": 500000.0,
             "stock_val": 500000.0,
             "cash_total": 1000000.0
+        },
+        {
+            "date": "2026-10-26",
+            "total_val": 999611.8866330453,
+            "etf_val": 499611.8866330452,
+            "stock_val": 500000.0,
+            "cash_total": 583326.4854070016
         }
     ]
 }
