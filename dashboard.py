@@ -543,48 +543,102 @@ with tab_overview:
 with tab_trades:
     st.subheader("Complete Trade Execution Log")
     
-    live_trades = state.get("trade_history", [])
+    # 1. Gather all live trades (both active open positions and closed trade stop-outs)
+    live_records = []
     
-    col_tctl1, col_tctl2 = st.columns([3, 1])
+    # Open ETF Positions
+    for tkr, pos in state.get("etf_portfolio", {}).get("positions", {}).items():
+        entry_p = float(pos.get("entry_price", 0.0))
+        cur_p = float(pos.get("peak_price", entry_p))
+        vol = int(pos.get("shares", 0))
+        pnl = (cur_p - entry_p) * vol
+        pnl_pct = ((cur_p - entry_p) / entry_p * 100.0) if entry_p > 0 else 0.0
+        live_records.append({
+            "time": pos.get("entry_date", "2026-10-26"),
+            "stock": tkr,
+            "strategy": "Multi-Asset ETF",
+            "buyprice": entry_p,
+            "sellprice": cur_p,
+            "volume": vol,
+            "net_pnl": pnl,
+            "net_pnl_pct": pnl_pct,
+            "status": "OPEN",
+            "reason": "Active Momentum Holding"
+        })
+        
+    # Open Stock Positions
+    for tkr, pos in state.get("stock_portfolio", {}).get("positions", {}).items():
+        entry_p = float(pos.get("entry_price", 0.0))
+        cur_p = float(pos.get("peak_price", entry_p))
+        vol = int(pos.get("shares", 0))
+        pnl = (cur_p - entry_p) * vol
+        pnl_pct = ((cur_p - entry_p) / entry_p * 100.0) if entry_p > 0 else 0.0
+        live_records.append({
+            "time": pos.get("entry_date", "2026-10-26"),
+            "stock": tkr,
+            "strategy": "Nifty 500 Stock",
+            "buyprice": entry_p,
+            "sellprice": cur_p,
+            "volume": vol,
+            "net_pnl": pnl,
+            "net_pnl_pct": pnl_pct,
+            "status": "OPEN",
+            "reason": "Active Momentum Holding"
+        })
+        
+    # Closed Trades (Stop losses and rotation exits)
+    for t in state.get("trade_history", []):
+        entry_p = float(t.get("entry_price", 0.0))
+        exit_p = float(t.get("exit_price", 0.0))
+        pnl_val = float(t.get("pnl", 0.0))
+        vol = t.get("shares")
+        if vol is None:
+            diff = abs(exit_p - entry_p)
+            vol = int(round(abs(pnl_val) / diff)) if diff > 0 else 0
+        else:
+            vol = int(vol)
+        
+        live_records.append({
+            "time": t.get("exit_date", t.get("entry_date", "N/A")),
+            "stock": t.get("ticker", "N/A"),
+            "strategy": "Multi-Asset ETF" if t.get("strategy") == "ETF" else "Nifty 500 Stock",
+            "buyprice": entry_p,
+            "sellprice": exit_p,
+            "volume": vol,
+            "net_pnl": pnl_val,
+            "net_pnl_pct": float(t.get("pnl_pct", 0.0)),
+            "status": "CLOSED",
+            "reason": t.get("reason", "Exit Order")
+        })
+
+    # Source Selector
+    col_tctl1, col_tctl2 = st.columns([2.5, 1.5])
     with col_tctl2:
-        trade_data_mode = st.radio(
+        trade_data_mode = st.selectbox(
             "Log Dataset Source",
-            options=["Live Paper Trading Log", "Historical Model Sample Log"],
-            horizontal=True
+            options=[
+                "Live Portfolio Trades (Active + Closed)",
+                "Historical Model 5-Year Backtest Log",
+                "All Combined"
+            ],
+            index=0
         )
     
-    if trade_data_mode == "Live Paper Trading Log":
-        if live_trades:
-            raw_trades = []
-            for t in live_trades:
-                entry_p = float(t.get("entry_price", 0.0))
-                exit_p = float(t.get("exit_price", 0.0))
-                pnl_val = float(t.get("pnl", 0.0))
-                vol = t.get("shares")
-                if vol is None:
-                    diff = abs(exit_p - entry_p)
-                    vol = int(round(abs(pnl_val) / diff)) if diff > 0 else 0
-                else:
-                    vol = int(vol)
-                
-                raw_trades.append({
-                    "time": t.get("exit_date", t.get("entry_date", "N/A")),
-                    "stock": t.get("ticker", "N/A"),
-                    "strategy": "Multi-Asset ETF" if t.get("strategy") == "ETF" else "Nifty 500 Stock",
-                    "buyprice": entry_p,
-                    "sellprice": exit_p,
-                    "volume": vol,
-                    "net_pnl": pnl_val,
-                    "net_pnl_pct": float(t.get("pnl_pct", 0.0)),
-                    "reason": t.get("reason", "Exit Order")
-                })
-        else:
-            raw_trades = []
+    if trade_data_mode == "Live Portfolio Trades (Active + Closed)":
+        raw_trades = live_records
+    elif trade_data_mode == "Historical Model 5-Year Backtest Log":
+        sample_list = get_sample_trade_history()
+        for s in sample_list:
+            s["status"] = "CLOSED"
+        raw_trades = sample_list
     else:
-        raw_trades = get_sample_trade_history()
+        sample_list = get_sample_trade_history()
+        for s in sample_list:
+            s["status"] = "CLOSED"
+        raw_trades = live_records + sample_list
 
     # Filter Bar
-    col_f1, col_f2, col_f3, col_f4 = st.columns([1.5, 1.5, 1.5, 2])
+    col_f1, col_f2, col_f3, col_f4, col_f5 = st.columns([1.2, 1.2, 1.2, 1.2, 1.8])
     
     with col_f1:
         filter_period = st.selectbox(
@@ -593,18 +647,24 @@ with tab_trades:
         )
         
     with col_f2:
+        filter_status = st.selectbox(
+            "Trade Status",
+            options=["All Statuses", "Active Open Only", "Closed Only"]
+        )
+
+    with col_f3:
         filter_strategy = st.selectbox(
             "Strategy Filter",
             options=["All Strategies", "Multi-Asset ETF", "Nifty 500 Stock"]
         )
         
-    with col_f3:
+    with col_f4:
         filter_outcome = st.selectbox(
             "Outcome Filter",
             options=["All Outcomes", "Profitable Only", "Loss Only"]
         )
         
-    with col_f4:
+    with col_f5:
         filter_search = st.text_input("Search Stock / Ticker", placeholder="e.g. MAFANG, TRENT, GOLDBEES")
 
     # Apply Filtering Logic
@@ -621,6 +681,12 @@ with tab_trades:
             cutoff = now - datetime.timedelta(days=30)
             df_t = df_t[df_t["parsed_time"] >= cutoff]
             
+        # Status Filter
+        if filter_status == "Active Open Only":
+            df_t = df_t[df_t["status"] == "OPEN"]
+        elif filter_status == "Closed Only":
+            df_t = df_t[df_t["status"] == "CLOSED"]
+
         # Strategy Filter
         if filter_strategy != "All Strategies":
             df_t = df_t[df_t["strategy"] == filter_strategy]
@@ -644,12 +710,12 @@ with tab_trades:
 
         col_s1, col_s2, col_s3, col_s4 = st.columns(4)
         col_s1.metric("Filtered Trades", f"{n_trades}")
-        col_s2.metric("Realized Net P&L", f"₹{sum_pnl:+,.2f}")
+        col_s2.metric("Total P&L", f"₹{sum_pnl:+,.2f}")
         col_s3.metric("Win Rate", f"{win_rate:.1f}%")
         col_s4.metric("Avg Trade Return", f"{avg_ret:+.2f}%")
 
         if n_trades > 0:
-            display_cols = ["time", "stock", "strategy", "buyprice", "sellprice", "volume", "net_pnl", "net_pnl_pct", "reason"]
+            display_cols = ["time", "stock", "strategy", "buyprice", "sellprice", "volume", "net_pnl", "net_pnl_pct", "status", "reason"]
             df_display = df_t[display_cols].copy()
             
             st.dataframe(
@@ -660,11 +726,12 @@ with tab_trades:
                     "stock": st.column_config.TextColumn("Stock", width="medium"),
                     "strategy": st.column_config.TextColumn("Strategy", width="medium"),
                     "buyprice": st.column_config.NumberColumn("Buy Price", format="₹%.2f"),
-                    "sellprice": st.column_config.NumberColumn("Sell Price", format="₹%.2f"),
-                    "volume": st.column_config.NumberColumn("Volume", format="%d"),
+                    "sellprice": st.column_config.NumberColumn("Current / Sell Price", format="₹%.2f"),
+                    "volume": st.column_config.NumberColumn("Volume (Shares)", format="%d"),
                     "net_pnl": st.column_config.NumberColumn("Net P&L (INR)", format="₹%.2f"),
                     "net_pnl_pct": st.column_config.NumberColumn("Net P&L (%)", format="%.2f%%"),
-                    "reason": st.column_config.TextColumn("Exit Reason", width="medium")
+                    "status": st.column_config.TextColumn("Status", width="small"),
+                    "reason": st.column_config.TextColumn("Execution Type / Reason", width="medium")
                 },
                 hide_index=True
             )
@@ -679,7 +746,7 @@ with tab_trades:
         else:
             st.info("No trades match the selected filter criteria.")
     else:
-        st.info("No live paper trades recorded yet. Positions have not hit stop losses or monthly rotation exits. Switch to 'Historical Model Sample Log' above to inspect quantitative model executions.")
+        st.info("No trades found matching current criteria.")
 
 # =============================================================================
 # TAB 3: ACTIVE HOLDINGS & STOP LOSS BUFFERS
