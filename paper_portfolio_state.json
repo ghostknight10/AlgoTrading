@@ -1,6 +1,6 @@
 {
     "created_at": "2026-10-24",
-    "last_updated": "2026-11-11",
+    "last_updated": "2026-11-12",
     "initial_capital": 1000000.0,
     "cash_balance": 1000000.0,
     "etf_portfolio": {
@@ -28,7 +28,7 @@
             "MON100.NS": {
                 "shares": 284,
                 "entry_price": 293.04998779296875,
-                "peak_price": 304.0899963378906,
+                "peak_price": 305.20001220703125,
                 "entry_date": "2026-10-26"
             },
             "ITBEES.NS": {
@@ -246,6 +246,13 @@
             "date": "2026-11-11",
             "total_val": 1011673.2033101388,
             "etf_val": 511673.2033101387,
+            "stock_val": 500000.0,
+            "cash_total": 583326.4854070016
+        },
+        {
+            "date": "2026-11-12",
+            "total_val": 1012115.9181233712,
+            "etf_val": 512115.91812337114,
             "stock_val": 500000.0,
             "cash_total": 583326.4854070016
         }
