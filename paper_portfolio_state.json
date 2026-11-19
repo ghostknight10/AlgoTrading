@@ -1,6 +1,6 @@
 {
     "created_at": "2026-10-24",
-    "last_updated": "2026-11-18",
+    "last_updated": "2026-11-19",
     "initial_capital": 1000000.0,
     "cash_balance": 1000000.0,
     "etf_portfolio": {
@@ -316,6 +316,13 @@
             "date": "2026-11-18",
             "total_val": 1002197.7024670907,
             "etf_val": 502197.7024670906,
+            "stock_val": 500000.0,
+            "cash_total": 583326.4854070016
+        },
+        {
+            "date": "2026-11-19",
+            "total_val": 999141.8087292977,
+            "etf_val": 499141.80872929766,
             "stock_val": 500000.0,
             "cash_total": 583326.4854070016
         }
