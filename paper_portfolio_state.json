@@ -1,6 +1,6 @@
 {
     "created_at": "2026-10-24",
-    "last_updated": "2026-11-25",
+    "last_updated": "2026-11-26",
     "initial_capital": 1000000.0,
     "cash_balance": 1000000.0,
     "etf_portfolio": {
@@ -22,7 +22,7 @@
             "PHARMABEES.NS": {
                 "shares": 3178,
                 "entry_price": 26.219999313354492,
-                "peak_price": 29.719999313354492,
+                "peak_price": 29.8700008392334,
                 "entry_date": "2026-10-26"
             },
             "MON100.NS": {
@@ -34,7 +34,7 @@
             "ITBEES.NS": {
                 "shares": 2344,
                 "entry_price": 35.540000915527344,
-                "peak_price": 36.65999984741211,
+                "peak_price": 37.02000045776367,
                 "entry_date": "2026-10-26"
             }
         }
@@ -386,6 +386,13 @@
             "date": "2026-11-25",
             "total_val": 992281.7070485421,
             "etf_val": 492281.70704854204,
+            "stock_val": 500000.0,
+            "cash_total": 583326.4854070016
+        },
+        {
+            "date": "2026-11-26",
+            "total_val": 1003159.3188382455,
+            "etf_val": 503159.3188382454,
             "stock_val": 500000.0,
             "cash_total": 583326.4854070016
         }
